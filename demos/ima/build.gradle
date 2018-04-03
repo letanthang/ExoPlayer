@@ -42,6 +42,10 @@ android {
     }
 }
 
+repositories {
+    mavenCentral()
+}
+
 dependencies {
     implementation project(modulePrefix + 'library-core')
     implementation project(modulePrefix + 'library-ui')
@@ -50,4 +54,6 @@ dependencies {
     implementation project(modulePrefix + 'library-smoothstreaming')
     implementation project(modulePrefix + 'extension-ima')
     implementation 'com.android.support:support-annotations:' + supportLibraryVersion
+    compile "org.java-websocket:Java-WebSocket:1.3.8"
+    compile 'com.google.code.gson:gson:2.8.2'
 }

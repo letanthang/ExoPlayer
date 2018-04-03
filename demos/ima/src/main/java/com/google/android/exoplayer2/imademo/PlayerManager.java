@@ -45,6 +45,9 @@ import com.google.android.exoplayer2.upstream.DefaultBandwidthMeter;
 import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
 import com.google.android.exoplayer2.util.Util;
 
+import vn.sbd.android.video.CustomInfo;
+import vn.sbd.android.video.SBDAnalyzer;
+
 /** Manages the {@link ExoPlayer}, the IMA plugin and all video playback. */
 /* package */ final class PlayerManager implements AdsMediaSource.MediaSourceFactory {
 
@@ -78,6 +81,14 @@ import com.google.android.exoplayer2.util.Util;
     // Create a player instance.
     player = ExoPlayerFactory.newSimpleInstance(context, trackSelector);
 
+    // add by Thang 28/03/2018
+    CustomInfo info = new CustomInfo("18f5ddc4ac792729ff4242db", "GUEST");
+    info.videoId = "123456";
+    info.videoTitle = "Theory of everything";
+    new SBDAnalyzer(player, info);
+
+    // Bind the player to the view.
+    playerView.setPlayer(player);
     // Bind the player to the view.
     playerView.setPlayer(player);
 
