@@ -98,6 +98,8 @@ import vn.sbd.android.video.SBDAnalyzer;
         buildMediaSource(Uri.parse(contentUrl), /* handler= */ null, /* listener= */ null);
 
     // Compose the content media source into a new AdsMediaSource with both ads and content.
+
+
     MediaSource mediaSourceWithAds =
         new AdsMediaSource(
             contentMediaSource,
@@ -109,8 +111,9 @@ import vn.sbd.android.video.SBDAnalyzer;
 
     // Prepare the player with the source.
     player.seekTo(contentPosition);
-    player.prepare(mediaSourceWithAds);
-    player.setPlayWhenReady(true);
+    // player.prepare(mediaSourceWithAds);
+    player.prepare(contentMediaSource);
+    player.setPlayWhenReady(true);player.getCurrentAdIndexInAdGroup();
   }
 
   public void reset() {

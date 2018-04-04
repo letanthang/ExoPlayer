@@ -60,6 +60,7 @@ public class SBDAnalyzer implements Player.EventListener {
             this.player = player;
             this.customInfo = customInfo;
             player.addListener(this);
+            this.lastPlayWhenReady = player.getPlayWhenReady();
             ws = new WebSocketClient( new URI( "ws://ws.sa.sbd.vn:10080" ) ) {
 
                 @Override
@@ -137,13 +138,13 @@ public class SBDAnalyzer implements Player.EventListener {
 //            JsonArray queue = new JsonArray();
 //            queue.add(json);
 //        }
+        String jsonString = "[" + json.toString() + "]";
         if (ws.isOpen()) {
-            String jsonString = "[" + json.toString() + "]";
             ws.send(jsonString);
             Log.d("SBDAnalyzer","send data" + jsonString);
             return true;
         }
-        Log.d("SBDAnalyzer","WS not connected.");
+        Log.d("SBDAnalyzer","WS not connected. " + jsonString);
         return false;
 
     }
@@ -193,7 +194,7 @@ public class SBDAnalyzer implements Player.EventListener {
         Log.d("SBDAnalyzer","onLoadingChanged " + isLoading);
     }
 
-    private boolean lastPlayWhenReady = false;
+    private boolean lastPlayWhenReady;
     private int lastPlaybackState = Player.STATE_ENDED;
     @Override
     public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
