@@ -82,10 +82,13 @@ import vn.sbd.android.video.SBDAnalyzer;
     player = ExoPlayerFactory.newSimpleInstance(context, trackSelector);
 
     // add by Thang 28/03/2018
-    CustomInfo info = new CustomInfo("18f5ddc4ac792729ff4242db", "GUEST");
-    info.videoId = "123456";
-    info.videoTitle = "Theory of everything";
-    new SBDAnalyzer(player, info);
+    CustomInfo info = new CustomInfo("35b1c479db3f1bfa2b11b12b", "GUEST");
+    info.videoId = "10d9e218-8176-438d-8a5e-a7b2c6dceb60";
+    info.videoTitle = "Sức Mạnh Binh Vận";
+
+    SBDAnalyzer analyzer =  SBDAnalyzer.getInstance(context);
+    analyzer.setCustomInfo(info);
+    analyzer.setPlayer(player);
 
     // Bind the player to the view.
     playerView.setPlayer(player);

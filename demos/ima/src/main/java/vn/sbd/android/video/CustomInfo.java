@@ -21,18 +21,18 @@ public class CustomInfo {
        this.envKey = envKey;
        this.viewerId = viewerId;
    }
-   public String getVideoJsonString() {
+   public JsonObject getVideoJson() {
        JsonObject obj = new JsonObject();
        JsonObject filter = new JsonObject();
        filter.addProperty("author", videoAuthor);
        filter.addProperty("cdn", videoCdn);
        filter.addProperty("isp", videoIsp);
-       obj.addProperty("videoUrl", videoUrl);
-       obj.addProperty("videoId", videoId);
-       obj.addProperty("videoTitle", videoTitle);
-       obj.addProperty("videoSeries", videoSeries);
-       obj.addProperty("videoDuration", videoDuration);
+       obj.addProperty("url", videoUrl);
+       obj.addProperty("id", videoId);
+       obj.addProperty("title", videoTitle);
+       obj.addProperty("series", videoSeries);
+       obj.addProperty("duration", videoDuration);
        obj.add("filter", filter);
-       return obj.toString();
+       return obj;
    }
 }
