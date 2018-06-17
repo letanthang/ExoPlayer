@@ -6,14 +6,19 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.util.Log;
+import android.view.Surface;
 
 import com.google.android.exoplayer2.ExoPlaybackException;
-import com.google.android.exoplayer2.ExoPlayer;
+import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.PlaybackParameters;
 import com.google.android.exoplayer2.Player;
+
+import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.Timeline;
+import com.google.android.exoplayer2.decoder.DecoderCounters;
 import com.google.android.exoplayer2.source.TrackGroupArray;
 import com.google.android.exoplayer2.trackselection.TrackSelectionArray;
+import com.google.android.exoplayer2.video.VideoRendererEventListener;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -37,20 +42,51 @@ import java.util.UUID;
  * Created by letanthang on 3/28/18.
  */
 
-public class SBDAnalyzer implements Player.EventListener {
+public class SBDAnalyzer implements Player.EventListener, VideoRendererEventListener {
     private final String sdkName = "AndroidSDK";
     private final String sdkVersion = "0.1";
     private static SBDAnalyzer instance;
     private CustomInfo customInfo;
     private WebSocketClient ws;
-    private ExoPlayer player;
+    private SimpleExoPlayer player;
     private VideoInfo videoInfo = new VideoInfo();
     private HashMap<String, CallBack> callbacks = new HashMap<>();
     private String session;
     private Boolean sessionReady = false;
     private Context context;
 
-    public void onVideoSizeChanged(int width, int height) {
+    @Override
+    public void onDroppedFrames(int count, long elapsedMs) {
+        Log.d("SBDAnalyzer", "onDroppedFrames " + count + " " + elapsedMs);
+    }
+
+    @Override
+    public void onVideoEnabled(DecoderCounters counters) {
+        Log.d("SBDAnalyzer", "onVideoEnabled");
+    }
+
+    @Override
+    public void onVideoDecoderInitialized(String decoderName, long initializedTimestampMs, long initializationDurationMs) {
+        Log.d("SBDAnalyzer", "onVideoDecoderInitialized");
+    }
+
+    @Override
+    public void onVideoInputFormatChanged(Format format) {
+        Log.d("SBDAnalyzer", "onVideoInputFormatChanged " + format.bitrate);
+    }
+
+    @Override
+    public void onRenderedFirstFrame(Surface surface) {
+        Log.d("SBDAnalyzer", "onRenderedFirstFrame");
+    }
+
+    @Override
+    public void onVideoDisabled(DecoderCounters counters) {
+        Log.d("SBDAnalyzer", "onVideoDisabled");
+    }
+
+    @Override
+    public void onVideoSizeChanged(int width, int height, int unappliedRotationDegrees, float pixelWidthHeightRatio) {
         Log.d("SBDAnalyzer", "onVideoSizeChanged " + width + " " + height);
         changeSize(width, height);
     }
@@ -76,7 +112,7 @@ public class SBDAnalyzer implements Player.EventListener {
         try {
             String osVersion = Build.VERSION.RELEASE;
             String device = Build.MANUFACTURER + " " + Build.MODEL;
-            String deviceType = isTablet(context) ? "Tablet" : "Phone";
+            String deviceType = isTablet(context) ? "Tablet" : "Smartphone";
             String os = "Android";
             String appName = getApplicationName(context);
             String appVersion = getApplicationVersion(context);
@@ -132,12 +168,13 @@ public class SBDAnalyzer implements Player.EventListener {
     public void setCustomInfo(CustomInfo customInfo) {
         this.customInfo = customInfo;
     }
-    public void setPlayer(ExoPlayer player) {
+    public void setPlayer(SimpleExoPlayer player) {
         Log.d("SBDAnalyzer", "setPlayer!!!!!!!!!!!!!!!!!" );
         this.player = player;
         this.lastPlayWhenReady = player.getPlayWhenReady();
         videoInfo = new VideoInfo();
         this.player.addListener(this);
+        this.player.addVideoDebugListener(this);
         loadPlayer();
         startSendWorker();
     }
@@ -362,21 +399,33 @@ public class SBDAnalyzer implements Player.EventListener {
     }
 
     private boolean lastPlayWhenReady;
-    private int lastPlaybackState = ExoPlayer.STATE_ENDED;
+    private int lastPlaybackState = Player.STATE_ENDED;
 
     @Override
     public void onTimelineChanged(Timeline timeline, Object manifest, int reason) {
-        Log.d("SBDAnalyzer", "onPlay: onTimelineChanged");
+        Log.d("SBDAnalyzer", "onTimelineChanged");
     }
 
     @Override
     public void onTracksChanged(TrackGroupArray trackGroups, TrackSelectionArray trackSelections) {
-        Log.d("SBDAnalyzer", "onPlay: onTracksChanged");
+        Log.d("SBDAnalyzer", "onTracksChanged");
     }
 
     @Override
     public void onLoadingChanged(boolean isLoading) {
-        Log.d("SBDAnalyzer", "onPlay: onLoadingChanged");
+        Log.d("SBDAnalyzer", "onLoadingChanged " + isLoading);
+
+        try {
+            if (player != null) {
+                int audioBitrate = player.getAudioFormat().bitrate;
+                int videoBitrate = player.getVideoFormat().bitrate;
+                Log.d("SBDAnalyzer", "current " + isLoading + "audio bitrate: " + audioBitrate + " | video bitrate: " + videoBitrate);
+            }
+        } catch (Exception error) {
+            Log.d("SBDAnalyzer", error.getLocalizedMessage());
+        }
+
+
     }
 
     @Override
@@ -433,23 +482,23 @@ public class SBDAnalyzer implements Player.EventListener {
 
     @Override
     public void onPositionDiscontinuity(int reason) {
-        Log.d("SBDAnalyzer", "onPlay: onPositionDiscontinuity");
+        Log.d("SBDAnalyzer", "onPositionDiscontinuity");
         pauseVideo();
     }
 
     @Override
     public void onPlaybackParametersChanged(PlaybackParameters playbackParameters) {
-        Log.d("SBDAnalyzer", "onPlay: onPlaybackParametersChanged");
+        Log.d("SBDAnalyzer", "onPlaybackParametersChanged");
     }
 
     @Override
     public void onSeekProcessed() {
-        Log.d("SBDAnalyzer", "onPlay: onSeekProcessed");
+        Log.d("SBDAnalyzer", ":onSeekProcessed");
     }
 
 
     public void onPlayWhenReadyCommitted() {
-        Log.d("SBDAnalyzer", "onPlay: onPlayWhenReadyCommitted");
+        Log.d("SBDAnalyzer", "onPlayWhenReadyCommitted");
         if (lastPlayWhenReady) {
             realPlayVideo();
         }
