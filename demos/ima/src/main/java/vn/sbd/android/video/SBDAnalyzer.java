@@ -16,6 +16,8 @@ import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.Timeline;
 import com.google.android.exoplayer2.decoder.DecoderCounters;
+import com.google.android.exoplayer2.metadata.Metadata;
+import com.google.android.exoplayer2.metadata.MetadataOutput;
 import com.google.android.exoplayer2.source.TrackGroupArray;
 import com.google.android.exoplayer2.trackselection.TrackSelectionArray;
 import com.google.android.exoplayer2.video.VideoRendererEventListener;
@@ -42,7 +44,7 @@ import java.util.UUID;
  * Created by letanthang on 3/28/18.
  */
 
-public class SBDAnalyzer implements Player.EventListener, VideoRendererEventListener {
+public class SBDAnalyzer implements Player.EventListener, VideoRendererEventListener, MetadataOutput {
     private final String sdkName = "AndroidSDK";
     private final String sdkVersion = "0.1";
     private static SBDAnalyzer instance;
@@ -91,6 +93,12 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
         changeSize(width, height);
     }
 
+    @Override
+    public void onMetadata(Metadata metadata) {
+        Log.d("SBDAnalyzer", "onMetadata" + metadata.toString());
+
+    }
+
     public interface CallBack {
         void work(JsonObject resp);
     }
@@ -112,9 +120,11 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
         try {
             String osVersion = Build.VERSION.RELEASE;
             String device = Build.MANUFACTURER + " " + Build.MODEL;
+            device = device.replaceAll("\\s+","");
             String deviceType = isTablet(context) ? "Tablet" : "Smartphone";
             String os = "Android";
             String appName = getApplicationName(context);
+            appName = appName.replaceAll("\\s+","");
             String appVersion = getApplicationVersion(context);
             String userAgent = sdkName + "/" + sdkVersion + " " + os + "/" + osVersion + " "
                     + appName + "/" + appVersion + " " + deviceType + "/" + device;
@@ -168,6 +178,7 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
     public void setCustomInfo(CustomInfo customInfo) {
         this.customInfo = customInfo;
     }
+
     public void setPlayer(SimpleExoPlayer player) {
         Log.d("SBDAnalyzer", "setPlayer!!!!!!!!!!!!!!!!!" );
         this.player = player;
@@ -175,6 +186,7 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
         videoInfo = new VideoInfo();
         this.player.addListener(this);
         this.player.addVideoDebugListener(this);
+        this.player.addMetadataOutput(this);
         loadPlayer();
         startSendWorker();
     }
