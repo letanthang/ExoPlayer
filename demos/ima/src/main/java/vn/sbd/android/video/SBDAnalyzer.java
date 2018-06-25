@@ -8,17 +8,32 @@ import android.os.Build;
 import android.util.Log;
 import android.view.Surface;
 
+import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.ExoPlaybackException;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.PlaybackParameters;
 import com.google.android.exoplayer2.Player;
 
+import com.google.android.exoplayer2.RendererCapabilities;
 import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.Timeline;
+import com.google.android.exoplayer2.audio.AudioRendererEventListener;
 import com.google.android.exoplayer2.decoder.DecoderCounters;
 import com.google.android.exoplayer2.metadata.Metadata;
 import com.google.android.exoplayer2.metadata.MetadataOutput;
+import com.google.android.exoplayer2.metadata.emsg.EventMessage;
+import com.google.android.exoplayer2.metadata.id3.ApicFrame;
+import com.google.android.exoplayer2.metadata.id3.CommentFrame;
+import com.google.android.exoplayer2.metadata.id3.GeobFrame;
+import com.google.android.exoplayer2.metadata.id3.Id3Frame;
+import com.google.android.exoplayer2.metadata.id3.PrivFrame;
+import com.google.android.exoplayer2.metadata.id3.TextInformationFrame;
+import com.google.android.exoplayer2.metadata.id3.UrlLinkFrame;
+import com.google.android.exoplayer2.metadata.scte35.SpliceCommand;
+import com.google.android.exoplayer2.source.TrackGroup;
 import com.google.android.exoplayer2.source.TrackGroupArray;
+import com.google.android.exoplayer2.trackselection.MappingTrackSelector;
+import com.google.android.exoplayer2.trackselection.TrackSelection;
 import com.google.android.exoplayer2.trackselection.TrackSelectionArray;
 import com.google.android.exoplayer2.video.VideoRendererEventListener;
 import com.google.gson.Gson;
@@ -44,13 +59,14 @@ import java.util.UUID;
  * Created by letanthang on 3/28/18.
  */
 
-public class SBDAnalyzer implements Player.EventListener, VideoRendererEventListener, MetadataOutput {
+public class SBDAnalyzer implements Player.EventListener, VideoRendererEventListener, AudioRendererEventListener, MetadataOutput {
     private final String sdkName = "AndroidSDK";
     private final String sdkVersion = "0.1";
     private static SBDAnalyzer instance;
     private CustomInfo customInfo;
     private WebSocketClient ws;
     private SimpleExoPlayer player;
+    private final MappingTrackSelector trackSelector;
     private VideoInfo videoInfo = new VideoInfo();
     private HashMap<String, CallBack> callbacks = new HashMap<>();
     private String session;
@@ -74,7 +90,7 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
 
     @Override
     public void onVideoInputFormatChanged(Format format) {
-        Log.d("SBDAnalyzer", "onVideoInputFormatChanged " + format.bitrate);
+        Log.d("SBDAnalyzer", "onVideoInputFormatChanged [" + Format.toLogString(format) + "]");
     }
 
     @Override
@@ -99,24 +115,55 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
 
     }
 
+    @Override
+    public void onAudioEnabled(DecoderCounters counters) {
+
+    }
+
+    @Override
+    public void onAudioSessionId(int audioSessionId) {
+
+    }
+
+    @Override
+    public void onAudioDecoderInitialized(String decoderName, long initializedTimestampMs, long initializationDurationMs) {
+
+    }
+
+    @Override
+    public void onAudioInputFormatChanged(Format format) {
+        Log.d("SBDAnalyzer", "onAudioInputFormatChanged + [" + Format.toLogString(format) + "]");
+    }
+
+    @Override
+    public void onAudioSinkUnderrun(int bufferSize, long bufferSizeMs, long elapsedSinceLastFeedMs) {
+
+    }
+
+    @Override
+    public void onAudioDisabled(DecoderCounters counters) {
+
+    }
+
     public interface CallBack {
         void work(JsonObject resp);
     }
-    public static SBDAnalyzer getInstance(Context context) {
+    public static SBDAnalyzer getInstance(Context context, MappingTrackSelector trackSelector) {
         if (instance == null) {
-            instance = new SBDAnalyzer(context);
+            instance = new SBDAnalyzer(context, trackSelector);
         }
         return instance;
     }
     public static SBDAnalyzer getInstance() {
         if (instance == null) {
-            instance = new SBDAnalyzer(null);
+            instance = new SBDAnalyzer(null, null);
         }
         return instance;
     }
 
-    private SBDAnalyzer(Context context) {
+    private SBDAnalyzer(Context context, MappingTrackSelector trackSelector) {
         this.context = context;
+        this.trackSelector = trackSelector;
         try {
             String osVersion = Build.VERSION.RELEASE;
             String device = Build.MANUFACTURER + " " + Build.MODEL;
@@ -421,6 +468,70 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
     @Override
     public void onTracksChanged(TrackGroupArray trackGroups, TrackSelectionArray trackSelections) {
         Log.d("SBDAnalyzer", "onTracksChanged");
+        String TAG = "SBDAnalyzer";
+        MappingTrackSelector.MappedTrackInfo mappedTrackInfo = trackSelector.getCurrentMappedTrackInfo();
+        if (mappedTrackInfo == null) {
+            Log.d(TAG, "Tracks []");
+            return;
+        }
+        Log.d(TAG, "Tracks [");
+        // Log tracks associated to renderers.
+        for (int rendererIndex = 0; rendererIndex < mappedTrackInfo.length; rendererIndex++) {
+            TrackGroupArray rendererTrackGroups = mappedTrackInfo.getTrackGroups(rendererIndex);
+            TrackSelection trackSelection = trackSelections.get(rendererIndex);
+            if (rendererTrackGroups.length > 0) {
+                Log.d(TAG, "  Renderer:" + rendererIndex + " [");
+                for (int groupIndex = 0; groupIndex < rendererTrackGroups.length; groupIndex++) {
+                    TrackGroup trackGroup = rendererTrackGroups.get(groupIndex);
+                    String adaptiveSupport = getAdaptiveSupportString(trackGroup.length,
+                            mappedTrackInfo.getAdaptiveSupport(rendererIndex, groupIndex, false));
+                    Log.d(TAG, "    Group:" + groupIndex + ", adaptive_supported=" + adaptiveSupport + " [");
+                    for (int trackIndex = 0; trackIndex < trackGroup.length; trackIndex++) {
+                        String status = getTrackStatusString(trackSelection, trackGroup, trackIndex);
+                        String formatSupport = getFormatSupportString(
+                                mappedTrackInfo.getTrackFormatSupport(rendererIndex, groupIndex, trackIndex));
+                        Log.d(TAG, "      " + status + " Track:" + trackIndex + ", "
+                                + Format.toLogString(trackGroup.getFormat(trackIndex))
+                                + ", supported=" + formatSupport);
+                    }
+                    Log.d(TAG, "    ]");
+                }
+                // Log metadata for at most one of the tracks selected for the renderer.
+                Log.d(TAG, "trackSelection");
+                if (trackSelection != null) {
+                    for (int selectionIndex = 0; selectionIndex < trackSelection.length(); selectionIndex++) {
+                        Metadata metadata = trackSelection.getFormat(selectionIndex).metadata;
+                        if (metadata != null) {
+                            Log.d(TAG, "    Metadata [");
+                            printMetadata(metadata, "      ");
+                            Log.d(TAG, "    ]");
+                            break;
+                        }
+                    }
+                }
+                Log.d(TAG, "  ]");
+            }
+        }
+        // Log tracks not associated with a renderer.
+        TrackGroupArray unassociatedTrackGroups = mappedTrackInfo.getUnassociatedTrackGroups();
+        if (unassociatedTrackGroups.length > 0) {
+            Log.d(TAG, "  Renderer:None [");
+            for (int groupIndex = 0; groupIndex < unassociatedTrackGroups.length; groupIndex++) {
+                Log.d(TAG, "    Group:" + groupIndex + " [");
+                TrackGroup trackGroup = unassociatedTrackGroups.get(groupIndex);
+                for (int trackIndex = 0; trackIndex < trackGroup.length; trackIndex++) {
+                    String status = getTrackStatusString(false);
+                    String formatSupport = getFormatSupportString(
+                            RendererCapabilities.FORMAT_UNSUPPORTED_TYPE);
+                    Log.d(TAG, "      " + status + " Track:" + trackIndex + ", "
+                            + Format.toLogString(trackGroup.getFormat(trackIndex))
+                            + ", supported=" + formatSupport);
+                }
+                Log.d(TAG, "    ]");
+            }
+            Log.d(TAG, "  ]");
+        }
+        Log.d(TAG, "]");
     }
 
     @Override
@@ -638,4 +749,90 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
 
     }
 
+
+    private static String getFormatSupportString(int formatSupport) {
+        switch (formatSupport) {
+            case RendererCapabilities.FORMAT_HANDLED:
+                return "YES";
+            case RendererCapabilities.FORMAT_EXCEEDS_CAPABILITIES:
+                return "NO_EXCEEDS_CAPABILITIES";
+            case RendererCapabilities.FORMAT_UNSUPPORTED_DRM:
+                return "NO_UNSUPPORTED_DRM";
+            case RendererCapabilities.FORMAT_UNSUPPORTED_SUBTYPE:
+                return "NO_UNSUPPORTED_TYPE";
+            case RendererCapabilities.FORMAT_UNSUPPORTED_TYPE:
+                return "NO";
+            default:
+                return "?";
+        }
+    }
+
+    private static String getAdaptiveSupportString(int trackCount, int adaptiveSupport) {
+        if (trackCount < 2) {
+            return "N/A";
+        }
+        switch (adaptiveSupport) {
+            case RendererCapabilities.ADAPTIVE_SEAMLESS:
+                return "YES";
+            case RendererCapabilities.ADAPTIVE_NOT_SEAMLESS:
+                return "YES_NOT_SEAMLESS";
+            case RendererCapabilities.ADAPTIVE_NOT_SUPPORTED:
+                return "NO";
+            default:
+                return "?";
+        }
+    }
+
+    // Suppressing reference equality warning because the track group stored in the track selection
+    // must point to the exact track group object to be considered part of it.
+    @SuppressWarnings("ReferenceEquality")
+    private static String getTrackStatusString(TrackSelection selection, TrackGroup group,
+                                               int trackIndex) {
+        return getTrackStatusString(selection != null && selection.getTrackGroup() == group
+                && selection.indexOf(trackIndex) != C.INDEX_UNSET);
+    }
+
+    private static String getTrackStatusString(boolean enabled) {
+        return enabled ? "[X]" : "[ ]";
+    }
+    private void printMetadata(Metadata metadata, String prefix) {
+        String TAG = "SBDAnalyzer";
+        for (int i = 0; i < metadata.length(); i++) {
+            Metadata.Entry entry = metadata.get(i);
+            if (entry instanceof TextInformationFrame) {
+                TextInformationFrame textInformationFrame = (TextInformationFrame) entry;
+                Log.d(TAG, prefix + String.format("%s: value=%s", textInformationFrame.id,
+                        textInformationFrame.value));
+            } else if (entry instanceof UrlLinkFrame) {
+                UrlLinkFrame urlLinkFrame = (UrlLinkFrame) entry;
+                Log.d(TAG, prefix + String.format("%s: url=%s", urlLinkFrame.id, urlLinkFrame.url));
+            } else if (entry instanceof PrivFrame) {
+                PrivFrame privFrame = (PrivFrame) entry;
+                Log.d(TAG, prefix + String.format("%s: owner=%s", privFrame.id, privFrame.owner));
+            } else if (entry instanceof GeobFrame) {
+                GeobFrame geobFrame = (GeobFrame) entry;
+                Log.d(TAG, prefix + String.format("%s: mimeType=%s, filename=%s, description=%s",
+                        geobFrame.id, geobFrame.mimeType, geobFrame.filename, geobFrame.description));
+            } else if (entry instanceof ApicFrame) {
+                ApicFrame apicFrame = (ApicFrame) entry;
+                Log.d(TAG, prefix + String.format("%s: mimeType=%s, description=%s",
+                        apicFrame.id, apicFrame.mimeType, apicFrame.description));
+            } else if (entry instanceof CommentFrame) {
+                CommentFrame commentFrame = (CommentFrame) entry;
+                Log.d(TAG, prefix + String.format("%s: language=%s, description=%s", commentFrame.id,
+                        commentFrame.language, commentFrame.description));
+            } else if (entry instanceof Id3Frame) {
+                Id3Frame id3Frame = (Id3Frame) entry;
+                Log.d(TAG, prefix + String.format("%s", id3Frame.id));
+            } else if (entry instanceof EventMessage) {
+                EventMessage eventMessage = (EventMessage) entry;
+                Log.d(TAG, prefix + String.format("EMSG: scheme=%s, id=%d, value=%s",
+                        eventMessage.schemeIdUri, eventMessage.id, eventMessage.value));
+            } else if (entry instanceof SpliceCommand) {
+                String description =
+                        String.format("SCTE-35 splice command: type=%s.", entry.getClass().getSimpleName());
+                Log.d(TAG, prefix + description);
+            }
+        }
+    }
 }

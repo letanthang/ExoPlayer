@@ -43,6 +43,7 @@ import com.google.android.exoplayer2.upstream.BandwidthMeter;
 import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DefaultBandwidthMeter;
 import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
+import com.google.android.exoplayer2.util.EventLogger;
 import com.google.android.exoplayer2.util.Util;
 
 import vn.sbd.android.video.CustomInfo;
@@ -86,12 +87,16 @@ import vn.sbd.android.video.SBDAnalyzer;
     info.videoId = "10d9e218-8176-438d-8a5e-a7b2c6dceb60";
     info.videoTitle = "Sức Mạnh Binh Vận";
 
-    SBDAnalyzer analyzer =  SBDAnalyzer.getInstance(context);
+    SBDAnalyzer analyzer =  SBDAnalyzer.getInstance(context, (DefaultTrackSelector) trackSelector);
     analyzer.setCustomInfo(info);
     analyzer.setPlayer(player);
 
-    // Bind the player to the view.
-    playerView.setPlayer(player);
+    EventLogger  eventLogger = new EventLogger((DefaultTrackSelector) trackSelector);
+      player.addListener(eventLogger);
+      player.addAudioDebugListener(eventLogger);
+      player.addVideoDebugListener(eventLogger);
+      player.addMetadataOutput(eventLogger);
+
     // Bind the player to the view.
     playerView.setPlayer(player);
 
