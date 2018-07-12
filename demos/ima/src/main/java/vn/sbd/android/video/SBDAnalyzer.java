@@ -8,6 +8,12 @@ import android.os.Build;
 import android.util.Log;
 import android.view.Surface;
 
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.ExoPlaybackException;
 import com.google.android.exoplayer2.Format;
@@ -163,6 +169,8 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
 
     private SBDAnalyzer(Context context, MappingTrackSelector trackSelector) {
         this.context = context;
+        requestQueue = Volley.newRequestQueue(this.context);
+        getVisitor();
         this.trackSelector = trackSelector;
         try {
             String osVersion = Build.VERSION.RELEASE;
@@ -264,9 +272,14 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
             JsonObject data = json.getAsJsonObject("data");
             json.remove("data");
             json.addProperty("data", data.toString());
-            queue.add(json);
+            addToWorkingQueue(json);
         }
         return true;
+    }
+
+    private void addToWorkingQueue(JsonObject json) {
+        queue.add(json);
+        if (sendTimer == null) startSendWorker();
     }
 
     JsonArray afterInitQueue = new JsonArray();
@@ -280,6 +293,7 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
             if (data.get("playPosition") == null) {
                 data.addProperty("playPosition", player.getCurrentPosition());
             }
+            data.addProperty("visitorId", visitorId);
 
             JsonObject json = new JsonObject();
             json.addProperty("type", "event");
@@ -331,18 +345,39 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
 
     Timer sendTimer;
     public void startSendWorker() {
-        sendTimer = new Timer();
-        sendTimer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                sendWorker();
-            }
-        }, 0, 500);
+        if (sendTimer == null) {
+            Log.d("SBDAnalyzer", "start Timer");
+            sendTimer = new Timer();
+            sendTimer.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    sendWorker();
+                }
+            }, 0, 500);
+        }
     }
 
+    public void stopSendWorker() {
+        if (sendTimer != null) {
+            Log.d("SBDAnalyzer","stop Timer");
+            sendTimer.cancel();
+            sendTimer.purge();
+            sendTimer = null;
+        }
+        notSendCount = 0;
+    }
+
+    private int notSendCount = 0;
     public void sendWorker() {
-//        Log.d("SBDAnalyzer","send worker");
+        Log.d("SBDAnalyzer","send worker " + notSendCount);
+        if (notSendCount >= 20) stopSendWorker();
+        if (notSendCount == 14 && !ws.isOpen()) {
+            Log.d("SBDAnalyzer","try connect ws again!");
+            ws.connect();
+        }
+
         if (!sessionReady || !ws.isOpen() || queue.size() == 0) {
+            notSendCount += 1;
             if (queue.size() == 0) {
 //                Log.d("SBDAnalyzer","queue has nothing to send");
             } else {
@@ -351,6 +386,8 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
 
             return;
         }
+
+        notSendCount = 0;
         Log.d("SBDAnalyzer","send worker data");
         sendArray(queue);
         queue = new JsonArray();
@@ -413,6 +450,7 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
         data.addProperty("envKey", customInfo.envKey);
         data.addProperty("viewerId", customInfo.viewerId);
         data.addProperty("playUrl", customInfo.videoUrl);
+        data.addProperty("visitor", visitorId);
         data.add("video", customInfo.getVideoJson());
 
         JsonObject json = new JsonObject();
@@ -834,5 +872,30 @@ public class SBDAnalyzer implements Player.EventListener, VideoRendererEventList
                 Log.d(TAG, prefix + description);
             }
         }
+    }
+    RequestQueue requestQueue;
+    String visitorId;
+    private void getVisitor() {
+        String url = "http://api.sa.sbd.vn/visitor";
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
+            new Response.Listener<String>() {
+                @Override
+                public void onResponse(String response) {
+                    Log.d("SBDAnalyzer", "getVisitor success: " + response);
+                    Gson gson = new Gson();
+                    JsonElement resp = gson.fromJson(response, JsonElement.class);
+                    JsonObject obj = resp.getAsJsonObject();
+                    if (obj.get("status").getAsString().equals("OK")) {
+                        visitorId = obj.getAsJsonArray("data").get(0).getAsJsonObject().get("id").getAsString();
+                        Log.d("SBDAnalyzer", "getVisitor id: " + visitorId);
+                    }
+                }
+            }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+
+            }
+        });
+        requestQueue.add(stringRequest);
     }
 }
